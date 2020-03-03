@@ -1,4 +1,5 @@
-import io.finbook.FileHandler;
+package io.finbook;
+
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.cms.ContentInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
