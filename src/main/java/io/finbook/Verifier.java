@@ -21,12 +21,13 @@ import org.bouncycastle.util.Store;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 public class Verifier {
 
-    private byte[] textToValidate;
+    public byte[] textToValidate;
 
     public Verifier(byte[] textToValidate) {
         this.textToValidate = textToValidate;
@@ -34,7 +35,6 @@ public class Verifier {
 
     public Verifier(String path) {
         this.textToValidate = new FileHandler(path).readByteArray();
-
     }
 
     public boolean validateSign() throws CertificateException, OperatorCreationException, IOException, CMSException {
@@ -47,8 +47,9 @@ public class Verifier {
         for (SignerInformation signer : cmsSignedData.getSignerInfos().getSigners()) {
             X509CertificateHolder certHolder = (X509CertificateHolder) store.getMatches(signer.getSID()).iterator().next();
             if(verifyCertificateIntegrity(certHolder)) {
-                X509Certificate cert = new JcaX509CertificateConverter().setProvider("BC").getCertificate(certHolder);
-                return signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(cert));
+                Security.addProvider(new BouncyCastleProvider());
+                X509Certificate cert = new JcaX509CertificateConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getCertificate(certHolder);
+                return signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider(BouncyCastleProvider.PROVIDER_NAME).build(cert));
             }
         }
         return false;
@@ -69,5 +70,4 @@ public class Verifier {
             return false;
         }
     }
-
 }
