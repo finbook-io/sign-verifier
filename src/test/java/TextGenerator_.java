@@ -29,6 +29,7 @@ public class TextGenerator_ {
     @Test
     public void execute(){
         assertThat(TextGenerator.getBase64TextFrom(originalText)).isEqualTo(base64Text);
+        assertThat(TextGenerator.getAsciiTextFrom(base64Text)).isEqualTo(originalText);
     }
 
     @Parameterized.Parameters

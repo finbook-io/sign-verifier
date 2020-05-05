@@ -37,7 +37,7 @@ public class Verifier {
         this.textToValidate = new FileHandler(path).readByteArray();
     }
 
-    public boolean validateSign() throws CertificateException, OperatorCreationException, IOException, CMSException {
+    public String validateSign() throws CertificateException, OperatorCreationException, IOException, CMSException {
         ByteArrayInputStream inputStream = new ByteArrayInputStream(textToValidate);
         ASN1InputStream asnInputStream = new ASN1InputStream(inputStream);
         CMSSignedData cmsSignedData = new CMSSignedData(ContentInfo.getInstance(asnInputStream.readObject()));
@@ -49,10 +49,12 @@ public class Verifier {
             if(verifyCertificateIntegrity(certHolder)) {
                 Security.addProvider(new BouncyCastleProvider());
                 X509Certificate cert = new JcaX509CertificateConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getCertificate(certHolder);
-                return signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider(BouncyCastleProvider.PROVIDER_NAME).build(cert));
+                if(signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider(BouncyCastleProvider.PROVIDER_NAME).build(cert))) {
+                    return TextGenerator.getBase64TextFrom(cert.getIssuerDN().getName() + cert.getSerialNumber());
+                }
             }
         }
-        return false;
+        return null;
     }
 
     private boolean verifyCertificateIntegrity(X509CertificateHolder certHolder) {
