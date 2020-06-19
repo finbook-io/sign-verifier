@@ -1,29 +1,18 @@
 package io.finbook;
 
-import org.bouncycastle.asn1.ASN1InputStream;
-import org.bouncycastle.asn1.cms.ContentInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509ContentVerifierProviderBuilder;
-import org.bouncycastle.cert.path.CertPath;
-import org.bouncycastle.cert.path.CertPathValidation;
-import org.bouncycastle.cert.path.validations.BasicConstraintsValidation;
-import org.bouncycastle.cert.path.validations.CertificatePoliciesValidationBuilder;
-import org.bouncycastle.cert.path.validations.KeyUsageValidation;
-import org.bouncycastle.cert.path.validations.ParentCertIssuedValidation;
-import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.util.Store;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
+import java.util.Iterator;
 
 public class Verifier {
 
@@ -37,38 +26,78 @@ public class Verifier {
         this.textToValidate = new FileHandler(path).readByteArray();
     }
 
-    public String validateSign() throws CertificateException, OperatorCreationException, IOException, CMSException {
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(textToValidate);
-        ASN1InputStream asnInputStream = new ASN1InputStream(inputStream);
-        CMSSignedData cmsSignedData = new CMSSignedData(ContentInfo.getInstance(asnInputStream.readObject()));
+    public String validateSign() {
+        Security.addProvider(new BouncyCastleProvider());
 
-        Store<X509CertificateHolder> store = cmsSignedData.getCertificates();
+        String rfc = null;
 
-        for (SignerInformation signer : cmsSignedData.getSignerInfos().getSigners()) {
-            X509CertificateHolder certHolder = (X509CertificateHolder) store.getMatches(signer.getSID()).iterator().next();
-            if(verifyCertificateIntegrity(certHolder)) {
-                Security.addProvider(new BouncyCastleProvider());
-                X509Certificate cert = new JcaX509CertificateConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME).getCertificate(certHolder);
-                if(signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider(BouncyCastleProvider.PROVIDER_NAME).build(cert))) {
-                    return TextGenerator.getBase64TextFrom(cert.getIssuerDN().getName() + cert.getSerialNumber());
-                }
+        CMSSignedData cms;
+        if((cms = validateContentOf(textToValidate)) == null) {
+            return null;
+        }
+
+        if(cms.getSignerInfos().getSigners().size() == 0) {
+            return null;
+        }
+
+        Store<X509CertificateHolder> store = cms.getCertificates();
+
+        for (SignerInformation signer : cms.getSignerInfos().getSigners()) {
+
+            X509Certificate cert = getCertOf(signer, store);
+            if(cert == null) {
+                return null;
+            }
+
+            if(validateCAOf(signer, cert)) {
+                if(rfc == null) rfc = getRFCOf(cert.getSubjectDN().toString());
+            } else {
+                return null;
             }
         }
+
+        if(rfc == null) {
+            System.out.println("El certificado con el que se ha firmado no dispone de un campo RFC");
+        }
+
+        return rfc;
+    }
+
+    private String getRFCOf(String subject) {
+        for (String field : subject.split(",")) {
+            if(field.substring(0, field.indexOf('=')).equals("1.3.5.8")) {
+                return field.substring(field.indexOf('=') + 1);
+            }
+        }
+
         return null;
     }
 
-    private boolean verifyCertificateIntegrity(X509CertificateHolder certHolder) {
-        CertPath path = new CertPath(new X509CertificateHolder[] {certHolder});
-        CertPathValidation[] params = new CertPathValidation[] {
-                new ParentCertIssuedValidation(new JcaX509ContentVerifierProviderBuilder().setProvider(BouncyCastleProvider.PROVIDER_NAME)),
-                new KeyUsageValidation(),
-                new BasicConstraintsValidation(),
-                new CertificatePoliciesValidationBuilder().build(path)
-        };
-
+    private X509Certificate getCertOf(SignerInformation signer, Store<X509CertificateHolder> store) {
+        Collection certCollection = store.getMatches(signer.getSID());
+        Iterator certIt = certCollection.iterator();
+        X509CertificateHolder certHolder = (X509CertificateHolder) certIt.next();
         try {
-            return path.validate(params).isValid();
-        } catch(NullPointerException e) {
+            return new JcaX509CertificateConverter().setProvider("BC").getCertificate(certHolder);
+        } catch (CertificateException e) {
+            return null;
+        }
+    }
+
+    private CMSSignedData validateContentOf(byte[] textToValidate) {
+        try {
+            return new CMSSignedData(textToValidate);
+        } catch(Exception e) {
+            System.out.println("El contenido de la firma no ha podido ser validado");
+            return null;
+        }
+    }
+
+    private boolean validateCAOf(SignerInformation signer, X509Certificate cert) {
+        try {
+            return signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(cert));
+        } catch(Exception e) {
+            System.out.println("El certificado no está firmado por una entidad de confianza");
             return false;
         }
     }
