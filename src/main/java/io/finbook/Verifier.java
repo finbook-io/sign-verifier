@@ -57,7 +57,7 @@ public class Verifier {
         }
 
         if(rfc == null) {
-            System.out.println("El certificado con el que se ha firmado no dispone de un campo RFC");
+            throw new RuntimeException("El certificado con el que se ha firmado no dispone de un campo RFC");
         }
 
         return rfc;
@@ -88,8 +88,7 @@ public class Verifier {
         try {
             return new CMSSignedData(textToValidate);
         } catch(Exception e) {
-            System.out.println("El contenido de la firma no ha podido ser validado");
-            return null;
+            throw new RuntimeException("El contenido de la firma no ha podido ser validado");
         }
     }
 
@@ -97,8 +96,7 @@ public class Verifier {
         try {
             return signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(cert));
         } catch(Exception e) {
-            System.out.println("El certificado no está firmado por una entidad de confianza");
-            return false;
+            throw new RuntimeException("El certificado no está firmado por una entidad de confianza");
         }
     }
 }
